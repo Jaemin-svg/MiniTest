@@ -130,8 +130,9 @@ def styled_table(df: pd.DataFrame, cols: list[str], th: dict):
 
 
 def reset_filters() -> None:
+    # pop으로 지우면 계산만 초기화되고 화면의 선택 칩은 남는다 → 빈 값을 직접 넣어 화면까지 갱신
     for k in FILTER_KEYS:
-        st.session_state.pop(k, None)
+        st.session_state[k] = "" if k == "search" else []
 
 
 def reset_thresholds() -> None:
@@ -290,13 +291,14 @@ total_ach = M.achievement(ref_rows)
 total_chg = M.overall_change(rows, ref_month, history)
 n_high = int((classified[R.RISK_LEVEL] == C.RISK_HIGH).sum())
 n_caution = int((classified[R.RISK_LEVEL] == C.RISK_CAUTION).sum())
+level_counts = {C.RISK_HIGH: n_high, C.RISK_CAUTION: n_caution}  # 0개인 등급은 화면·엑셀에 표시하지 않음
 
 summary = pd.DataFrame({
     "항목": ["분석 기준월", "과거 평균 기간", "협력사 수", "당월 입고량(톤)", "당월 목표량(톤)", "전체 달성률(%)",
-           "과거평균 대비 증감률(%)", "고위험 업체 수", "주의 업체 수", "원본 파일"],
+           "과거평균 대비 증감률(%)"] + [f"{lvl} 업체 수" for lvl, n in level_counts.items() if n] + ["원본 파일"],
     "값": [f"{ref_month:%Y-%m}", f"{history}개월", len(classified), round(total_actual, 1), round(total_target, 1),
-          None if pd.isna(total_ach) else round(total_ach, 1), None if pd.isna(total_chg) else round(total_chg, 1),
-          n_high, n_caution, filename],
+          None if pd.isna(total_ach) else round(total_ach, 1), None if pd.isna(total_chg) else round(total_chg, 1)]
+         + [n for n in level_counts.values() if n] + [filename],
 })
 
 # ── 사이드바 ⑤ 다운로드 ────────────────────────────────────────────
@@ -387,12 +389,12 @@ with tab_summary:
                 border=True, help=f"전월 대비 증감 · 당월 목표량 {fmt_ton(total_target)} · 목표량 0인 행의 입고량은 제외")
     k[2].metric("평균 대비", fmt_pct(total_chg, signed=True), border=True,
                 help=f"과거 {history}개월 평균 대비 증감률 (전체 입고량 합계 기준, 기준월 제외)")
-    k[3].metric(C.risk_label(C.RISK_HIGH), f"{n_high}개",
-                f"{n_high - prev_high:+d}" if prev_high is not None else None,
-                delta_color="inverse", border=True, help="전월 대비 증감 (늘어나면 빨간색)")
-    k[4].metric(C.risk_label(C.RISK_CAUTION), f"{n_caution}개",
-                f"{n_caution - prev_caution:+d}" if prev_caution is not None else None,
-                delta_color="inverse", border=True, help="전월 대비 증감 (늘어나면 빨간색)")
+    prev_counts = {C.RISK_HIGH: prev_high, C.RISK_CAUTION: prev_caution}
+    shown = [lvl for lvl, n in level_counts.items() if n]  # 0개인 등급 카드는 숨김
+    for slot, lvl in zip(k[3:], shown):
+        n, pn = level_counts[lvl], prev_counts[lvl]
+        slot.metric(C.risk_label(lvl), f"{n}개", f"{n - pn:+d}" if pn is not None else None,
+                    delta_color="inverse", border=True, help="전월 대비 증감 (늘어나면 빨간색)")
     st.caption(f"협력사 {len(classified)}개 · 증감 표시는 전월({prev_month:%Y-%m}) 대비" if prev_month is not None
                else f"협력사 {len(classified)}개 · 전월 데이터가 없어 증감을 표시하지 않습니다")
 
@@ -421,8 +423,8 @@ with tab_risk:
     else:
         h1, h2 = st.columns([3, 1], vertical_alignment="bottom")
         h1.subheader(f"리스크 업체 {len(risky)}개")
-        h1.caption(f"{C.risk_label(C.RISK_HIGH)} {n_high}개 · {C.risk_label(C.RISK_CAUTION)} {n_caution}개 — "
-                   "고위험 → 주의, 같은 등급은 A등급·달성률 낮은 순")
+        h1.caption(" · ".join(f"{C.risk_label(lvl)} {n}개" for lvl, n in level_counts.items() if n)
+                   + " — 고위험 → 주의, 같은 등급은 A등급·달성률 낮은 순")
         h2.download_button("📥 리스크 업체 목록", exporter.build_table(risky[RISK_TABLE_COLUMNS], "리스크 업체"),
                            file_name=f"리스크업체_{ref_month:%Y%m}.xlsx", mime=XLSX_MIME, width="stretch")
         st.dataframe(styled_table(risky, RISK_TABLE_COLUMNS, th), hide_index=True, width="stretch",
