@@ -29,14 +29,33 @@ def export_filename(ref_month: pd.Timestamp) -> str:
     return f"스크랩_협력사_리스크분석_{pd.Timestamp(ref_month):%Y%m}.xlsx"
 
 
+FMT_INT = "#,##0"
+FMT_DEC = "#,##0.0"
+
+
+def _number_format(value) -> str | None:
+    """숫자 셀의 엑셀 표시 형식: 천 단위 콤마, 정수면 소수점 없음. 숫자가 아니면 None."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return FMT_INT if float(value).is_integer() else FMT_DEC
+
+
 def _write(sheets: dict[str, pd.DataFrame]) -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         for name, df in sheets.items():
             df.to_excel(writer, sheet_name=name, index=False)
             ws = writer.sheets[name]
-            for i, col in enumerate(df.columns, start=1):  # 대략적인 열 너비
-                width = max([len(str(col))] + [len(str(v)) for v in df[col].head(200)]) * 1.3 + 2
+            # 숫자 셀에 천 단위 콤마 서식 (값은 숫자 그대로라 엑셀에서 계산 가능). 소수가 하나라도 있는 열은 소수 1자리로 통일.
+            for col_cells in ws.iter_cols(min_row=2):
+                fmts = {_number_format(c.value) for c in col_cells} - {None}
+                col_fmt = FMT_DEC if FMT_DEC in fmts else FMT_INT
+                for c in col_cells:
+                    if _number_format(c.value):
+                        c.number_format = col_fmt
+            for i, col in enumerate(df.columns, start=1):  # 대략적인 열 너비 (콤마 포함)
+                width = max([len(str(col))] + [len(f"{v:,}") if isinstance(v, (int, float)) else len(str(v))
+                                               for v in df[col].head(200)]) * 1.3 + 2
                 ws.column_dimensions[ws.cell(row=1, column=i).column_letter].width = min(width, 50)
             ws.freeze_panes = "A2"
     return buf.getvalue()

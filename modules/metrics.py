@@ -83,7 +83,7 @@ def validate_data(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         m_neg = num < 0
         add(m_empty, LEVEL_ERROR, col, "값 없음 → 계산 제외")
         add(m_text, LEVEL_ERROR, col, lambda i, o=orig: f"숫자가 아닌 값 '{o[i]}' → 계산 제외")
-        add(m_neg, LEVEL_ERROR, col, lambda i, n=num: f"음수 값 {n[i]:g} → 계산 제외")
+        add(m_neg, LEVEL_ERROR, col, lambda i, n=num: f"음수 값 {n[i]:,g} → 계산 제외")
         bad |= m_empty | m_text | m_neg
         work[col] = num
 
