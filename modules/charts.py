@@ -92,6 +92,7 @@ def risk_donut(classified: pd.DataFrame, dark: bool = False) -> go.Figure:
         return _empty(dark=dark)
     p = palette(dark)
     counts = classified[R.RISK_LEVEL].value_counts().reindex(C.RISK_LEVELS, fill_value=0)
+    counts = counts[counts > 0]  # 결과에 없는 등급은 조각·범례에서 제외
     fig = go.Figure(go.Pie(
         labels=list(counts.index), values=counts.values, hole=0.62, sort=False,
         direction="clockwise", marker=dict(colors=[C.RISK_COLORS[l] for l in counts.index],
