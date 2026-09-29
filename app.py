@@ -335,7 +335,11 @@ with st.expander("데이터 미리보기 (상위 10행)", icon="📄"):
     preview[C.COL_MONTH] = preview[C.COL_MONTH].dt.strftime("%Y-%m")
     for col in preview.select_dtypes("object").columns:  # '1,234'·'abc'가 섞인 숫자 컬럼은 원본 그대로 문자열로 표시
         preview[col] = preview[col].astype("string")
-    st.dataframe(preview, hide_index=True, width="stretch")
+    preview_formats = {  # 숫자로 읽힌 컬럼만 천 단위 콤마 (문자가 섞인 컬럼은 원본 표시)
+        col: st.column_config.NumberColumn(format="%,.1f" if col == C.COL_ACTUAL else "%,.0f")
+        for col in C.NUMERIC_COLUMNS if pd.api.types.is_numeric_dtype(preview[col])
+    }
+    st.dataframe(preview, hide_index=True, width="stretch", column_config=preview_formats)
     st.caption(f"전체 {len(result.df):,}행 · 협력사 {data[C.COL_CODE].nunique():,}개 · "
                f"기간 {months[0]:%Y-%m} ~ {months[-1]:%Y-%m}")
 
